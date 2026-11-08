@@ -36,6 +36,9 @@ test('imports reject invalid schema, duplicate ids, oversized and non-string val
   const duplicate = emptyResume();
   duplicate.sections[1].id = duplicate.sections[0].id;
   assert.throws(() => parseResume(JSON.stringify(duplicate)));
+  const reserved = emptyResume();
+  reserved.sections[0].id = 'basics';
+  assert.throws(() => parseResume(JSON.stringify(reserved)));
   assert.throws(() => parseResume(' '.repeat(2_000_001)));
 });
 
@@ -43,6 +46,18 @@ test('links accept web addresses and reject executable schemes', () => {
   assert.equal(safeUrl('github.com/me'), 'https://github.com/me');
   assert.equal(safeUrl('https://example.com/a?x=1&y=2'), 'https://example.com/a?x=1&y=2');
   for (const value of ['javascript:alert(1)', 'data:text/html,test', 'file:///etc/passwd', '//evil.test', 'bad link']) assert.equal(safeUrl(value), '');
+});
+
+test('LaTeX preserves engineering comparison and pipe symbols', () => {
+  const resume = emptyResume();
+  resume.basics.name = 'Latency <10 ms >5 ms | C++';
+  assert.match(toLatex(resume), /Latency \\textless\{\}10 ms \\textgreater\{\}5 ms \\textbar\{\} C\+\+/);
+});
+
+test('LaTeX keeps links with fragments and percent-encoded paths clickable', () => {
+  const resume = emptyResume();
+  resume.basics.website = 'https://example.com/my%20work#projects';
+  assert.match(toLatex(resume), /\\href\{https:\/\/example\.com\/my\\%20work\\#projects\}/);
 });
 
 test('exports follow user section order and custom labels, ignoring blank bullets', () => {

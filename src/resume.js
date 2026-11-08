@@ -2,6 +2,9 @@ import { preamble } from './template.js';
 
 export const basicFields = ['name', 'email', 'phone', 'location', 'linkedin', 'github', 'website'];
 const entryFields = ['title', 'subtitle', 'location', 'dates', 'details', 'url'];
+export const MAX_BACKUP_BYTES = 2_000_000;
+export const backupJson = resume => JSON.stringify(resume, null, 2);
+export const backupFits = resume => new TextEncoder().encode(backupJson(resume)).length <= MAX_BACKUP_BYTES;
 export function emptyResume() {
   return { version: 1, basics: Object.fromEntries(basicFields.map(key => [key, ''])), settings: { paper: 'letter', spacing: 'normal' }, sections: [
     { id: 'education', type: 'education', title: 'Education', entries: [] },
@@ -11,7 +14,7 @@ export function emptyResume() {
   ] };
 }
 export function parseResume(text) {
-  if (text.length > 2_000_000) throw new Error('This file is too large. Use a resume backup under 2 MB.');
+  if (new TextEncoder().encode(text).length > MAX_BACKUP_BYTES) throw new Error('This file is too large. Use a resume backup under 2 MB.');
   let value;
   try { value = JSON.parse(text); } catch { throw new Error('This file is not valid JSON. Choose a resume backup.'); }
   const invalid = () => { throw new Error('This is not a supported resume backup (version 1).'); };
@@ -19,7 +22,7 @@ export function parseResume(text) {
   if (!value || value.version !== 1 || !value.basics || !basicFields.every(key => string(value.basics[key])) || !['letter', 'a4'].includes(value.settings?.paper) || !['normal', 'compact'].includes(value.settings?.spacing) || !Array.isArray(value.sections) || value.sections.length > 30) invalid();
   const ids = new Set();
   const sections = value.sections.map(section => {
-    if (!section || !string(section.id) || !section.id || ids.has(section.id) || !['education', 'experience', 'projects', 'skills', 'custom'].includes(section.type) || !string(section.title) || !Array.isArray(section.entries) || section.entries.length > 100) invalid();
+    if (!section || !string(section.id) || !section.id || section.id === 'basics' || ids.has(section.id) || !['education', 'experience', 'projects', 'skills', 'custom'].includes(section.type) || !string(section.title) || !Array.isArray(section.entries) || section.entries.length > 100) invalid();
     ids.add(section.id);
     const entries = section.entries.map(entry => {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry) || !entryFields.every(key => entry[key] === undefined || string(entry[key]))) invalid();
@@ -30,7 +33,7 @@ export function parseResume(text) {
   return { version: 1, basics: Object.fromEntries(basicFields.map(key => [key, value.basics[key]])), settings: { paper: value.settings.paper, spacing: value.settings.spacing }, sections };
 }
 export const escapeHtml = (value = '') => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-export const escapeTex = (value = '') => value.replace(/[\\{}$&#%_^~]/g, char => ({ '\\': '\\textbackslash{}', '{': '\\{', '}': '\\}', '$': '\\$', '&': '\\&', '#': '\\#', '%': '\\%', '_': '\\_', '^': '\\textasciicircum{}', '~': '\\textasciitilde{}' })[char]).replace(/\r?\n/g, ' ');
+export const escapeTex = (value = '') => value.replace(/[\\{}$&#%_^~<>|]/g, char => ({ '\\': '\\textbackslash{}', '{': '\\{', '}': '\\}', '$': '\\$', '&': '\\&', '#': '\\#', '%': '\\%', '_': '\\_', '^': '\\textasciicircum{}', '~': '\\textasciitilde{}', '<': '\\textless{}', '>': '\\textgreater{}', '|': '\\textbar{}' })[char]).replace(/\r?\n/g, ' ');
 export function safeUrl(value = '') {
   if (!value || /\s/.test(value) || value.startsWith('//')) return '';
   const candidate = /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`;
@@ -61,7 +64,7 @@ export function renderResume(resume) {
 }
 export function toLatex(resume) {
   const e = escapeTex;
-  const texLink = (label, href) => href && !/[{}\\%#]/.test(href) ? `\\href{${e(href)}}{\\underline{${e(label)}}}` : e(label);
+  const texLink = (label, href) => href ? `\\href{${e(href)}}{\\underline{${e(label)}}}` : e(label);
   const b = resume.basics;
   const heading = [b.name ? `\\textbf{\\Huge \\scshape ${e(b.name)}}` : '', contacts(resume).map(([label, href]) => texLink(label, href)).join(' $|$ ')].filter(Boolean).join(' \\\\ \\vspace{1pt}\n\\small ');
   let setup = preamble;
